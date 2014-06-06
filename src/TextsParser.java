@@ -2,7 +2,9 @@
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class TextsParser {
 
@@ -14,29 +16,32 @@ public class TextsParser {
 
     public static class Entry {
 
-        public final int offset;
+        public final String id;
         public final int length;
         public final byte[] originalText;
         public final byte[] replacementText;
+        public final Map<String, List<Integer>> offsets;
 
-        public Entry(int offset, int length, byte[] originalText, byte[] replacementText) {
-            this.offset = offset;
+        public Entry(String id, int length, byte[] originalText, byte[] replacementText, Map<String, List<Integer>> offsets) {
+            this.id = id;
             this.length = length;
             this.originalText = originalText;
             this.replacementText = replacementText;
+            this.offsets = offsets;
         }
 
         @Override
         public String toString() {
-            return "Entry{" + "offset=" + offset + ", length=" + length
+            return "Entry{" + "id=" + id + ", length=" + length
                     + ", originalText=" + new String(originalText, SHIFT_JIS)
-                    + ", replacementText=" + new String(replacementText, SHIFT_JIS) + '}';
+                    + ", replacementText=" + new String(replacementText, SHIFT_JIS)
+                    + ", offsets=" + offsets + '}';
         }
     }
 
     public static List<Entry> parse(byte[] data) {
         int offset = 0;
-        List<Entry> entries = new ArrayList<>(5000);
+        List<Entry> entries = new ArrayList<>(25_000);
         while (offset < data.length) {
             final boolean ignore;
             if (HASH == b(data, offset)) {
@@ -45,28 +50,74 @@ public class TextsParser {
             } else {
                 ignore = false;
             }
-            final int entryOffset;
+            final String entryId;
             {
-                final int offsetHexSize = next(data, offset, TAB);
-                final byte[] hexBytes = Arrays.copyOfRange(data, offset, offset + offsetHexSize);
-                final String hex = new String(hexBytes, SHIFT_JIS);
-                entryOffset = Integer.parseInt(hex, 16);
-                offset += offsetHexSize;
-                offset++;//tab
+                final int idSize = next(data, offset, CR);
+                final byte[] idBytes = Arrays.copyOfRange(data, offset, offset + idSize);
+                entryId = new String(idBytes, SHIFT_JIS);
+                offset += idSize;
+                offset++;//cr
+                if (b(data, offset) != LF) {
+                    err("Line feed expected at " + Integer.toHexString(offset));
+                }
+                offset++;
+            }
+            final Map<String, List<Integer>> entryOffsets = new LinkedHashMap<>();
+            for (;;) {
+                final int offsetSize = next(data, offset, CR);
+                if (offsetSize > 0) {
+                    final int fileSize = next(data, offset, TAB);
+                    final byte[] fileBytes = Arrays.copyOfRange(data, offset, offset + fileSize);
+                    final String file = new String(fileBytes, SHIFT_JIS).intern();
+                    offset += fileSize;
+                    offset++;//tab
+
+                    final int offsetHexSize = offsetSize - (fileSize + 1);//file+tab
+                    final byte[] hexBytes = Arrays.copyOfRange(data, offset, offset + offsetHexSize);
+                    final String hex = new String(hexBytes, SHIFT_JIS);
+                    final int fileOffset = Integer.parseInt(hex, 16);
+                    List<Integer> offsets = entryOffsets.get(file);
+                    if (offsets == null) {
+                        offsets = new ArrayList<>(1);
+                        entryOffsets.put(file, offsets);
+                    }
+                    offsets.add(fileOffset);
+                    offset += offsetHexSize;
+                    offset++;//cr
+                    if (b(data, offset) != LF) {
+                        err("Line feed expected at " + Integer.toHexString(offset));
+                    }
+                    offset++;
+                } else {
+                    offset++;//cr
+                    if (b(data, offset) != LF) {
+                        err("Line feed expected at " + Integer.toHexString(offset));
+                    }
+                    offset++;
+                    break;
+                }
             }
             final int entrySize;
             {
-                final int sizeHexSize = next(data, offset, TAB);
+                final int sizeHexSize = next(data, offset, CR);
                 final byte[] hexBytes = Arrays.copyOfRange(data, offset, offset + sizeHexSize);
                 final String hex = new String(hexBytes, SHIFT_JIS);
                 entrySize = Integer.parseInt(hex, 16);
                 offset += sizeHexSize;
-                offset++;//tab
+                offset++;//cr
+                if (b(data, offset) != LF) {
+                    err("Line feed expected at " + Integer.toHexString(offset));
+                }
+                offset++;
             }
             final byte[] originalBytes = Arrays.copyOfRange(data, offset, offset + entrySize);
             offset += entrySize;
-            if (b(data, offset) != TAB) {
+            if (b(data, offset) != CR) {
                 err("tab expected at " + Integer.toHexString(offset));
+            }
+            offset++;//cr
+            if (b(data, offset) != LF) {
+                err("Line feed expected at " + Integer.toHexString(offset));
             }
             offset++;
             final byte[] replacementBytes = Arrays.copyOfRange(data, offset, offset + entrySize);
@@ -78,10 +129,9 @@ public class TextsParser {
             if (b(data, offset) != LF) {
                 err("Line feed expected at " + Integer.toHexString(offset));
             }
-
             offset++;
             if (!ignore) {
-                final Entry entry = new Entry(entryOffset, entrySize, originalBytes, replacementBytes);
+                final Entry entry = new Entry(entryId, entrySize, originalBytes, replacementBytes, entryOffsets);
                 entries.add(entry);
             }
 //            System.out.println("\t\t"+ignore+" "+entry);

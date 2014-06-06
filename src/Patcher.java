@@ -7,8 +7,13 @@ import java.nio.channels.FileChannel.MapMode;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 
 public class Patcher {
 
@@ -34,18 +39,44 @@ public class Patcher {
     }
 
     public static void main(String[] args) throws IOException {
-        final String target = "C:\\Users\\Playtech\\New folder\\gc\\hltmp\\start.rel";
-        final String texts = "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\start.rel.texts";
+        final String targetdir = args[0];//"C:\\Users\\Playtech\\New folder\\gc\\hltmp";
+        final String texts = args[1];//"C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\texts.dump";
+        Path hlDir = Paths.get(targetdir);
         byte[] data = Files.readAllBytes(new File(texts).toPath());
         List<TextsParser.Entry> entries = TextsParser.parse(data);
-        Path tPath = new File(target).toPath();
-        try (FileChannel fc = FileChannel.open(tPath, StandardOpenOption.WRITE,StandardOpenOption.READ)) {
-            MappedByteBuffer map = fc.map(MapMode.READ_WRITE, 0, fc.size());
+        for (TextsParser.Entry entry : entries) {
+            System.out.println(entry);
+        }
+        List<FileChannel> toClose = new ArrayList<>(5);
+        Map<String, MappedByteBuffer> maps = new HashMap<>(10);
+        try {
             for (TextsParser.Entry e : entries) {
-                map.position(e.offset);
-                map.put(e.replacementText);
+                System.out.println("patching string " + e.id);
+                for (Entry<String, List<Integer>> entry : e.offsets.entrySet()) {
+                    String file = entry.getKey();
+                    List<Integer> offsets = entry.getValue();
+                    MappedByteBuffer mm = maps.get(file);
+                    if (mm == null) {
+                        FileChannel fc = FileChannel.open(hlDir.resolve(file), StandardOpenOption.WRITE, StandardOpenOption.READ);
+                        toClose.add(fc);
+                        mm = fc.map(MapMode.READ_WRITE, 0, fc.size());
+                        maps.put(file, mm);
+                    }
+                    for (Integer off : offsets) {
+                        mm.position(off);
+                        mm.put(e.replacementText);
+
+                    }
+                }
+                System.out.println("\tpatched string " + e.id);
             }
-            map.force();
+            for (Entry<String, MappedByteBuffer> entry : maps.entrySet()) {
+                entry.getValue().force();
+            }
+        } finally {
+            for (FileChannel fc : toClose) {
+                fc.close();
+            }
         }
     }
 }
