@@ -226,6 +226,7 @@ public class StringExtractor {
                 fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
                 i++;
             }
+            System.out.println(i+" strings");
         }
     }
 
