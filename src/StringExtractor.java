@@ -206,16 +206,16 @@ public class StringExtractor {
                 }
                 id = "hl-string-" + id;
                 fos.write(id.getBytes(HomelandString.SHIFT_JIS));
-                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
+                fos.write("\n".getBytes(HomelandString.SHIFT_JIS));
                 for (HomelandString h : list) {
                     fos.write(h.file.getBytes(HomelandString.SHIFT_JIS));
                     fos.write("\t".getBytes(HomelandString.SHIFT_JIS));
                     fos.write(toHex(h.offset).getBytes(HomelandString.SHIFT_JIS));
-                    fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
+                    fos.write("\n".getBytes(HomelandString.SHIFT_JIS));
                 }
-                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
+                fos.write("\n".getBytes(HomelandString.SHIFT_JIS));
                 fos.write(toHex(hs.length).getBytes(HomelandString.SHIFT_JIS));
-                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
+                fos.write("\n".getBytes(HomelandString.SHIFT_JIS));
                 fos.write(hs.strBytes);
 //                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
 //                byte[] strNumberBytes = sha.getBytes(HomelandString.SHIFT_JIS);
@@ -223,7 +223,7 @@ public class StringExtractor {
 //                for (int j = strNumberBytes.length; j < hs.strBytes.length; j++) {
 //                    fos.write(0x3F);
 //                }
-                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
+                fos.write("\n".getBytes(HomelandString.SHIFT_JIS));
                 i++;
             }
             System.out.println(i+" strings");
