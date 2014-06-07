@@ -2,7 +2,6 @@
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.List;
 
 public class RelSearcher {
@@ -12,7 +11,7 @@ public class RelSearcher {
     //even is end, exclusive
     private static int[] INVALID_FIRST_BYTE_RANGES = {
         0x00, 0x20,
-        0x7F, 81,
+        0x7F, 0x81,
         0xA0, 0xA1,
         0xF0, 0x100,};
     private static int[] DOUBLE_BYTE_CHARACTER_RANGES = {
@@ -21,7 +20,7 @@ public class RelSearcher {
     private static int[] INVALID_SECOND_BYTE_CHARACTER_RANGES = {
         0x00, 0x40,
         0x7F, 0x80,
-        0xFC, 0x100,};
+        0xFD, 0x100,};
     private static final byte END_OF_STRING = 0;
     private static final Charset SHIFT_JIS = Charset.forName("Shift-Jis");
 
@@ -44,7 +43,7 @@ public class RelSearcher {
                         if (!inRange(b, INVALID_FIRST_BYTE_RANGES) /*
                                  * && (map.position() - 1) % 4 == 0
                                  */) {
-                            state = State.matching;
+                            state = inRange(b, DOUBLE_BYTE_CHARACTER_RANGES) ? State.secondByte : State.matching;
                             start = rel.position() - 1;
                         }
                         break;
@@ -54,12 +53,12 @@ public class RelSearcher {
                             state = State.searching;
                             int end = rel.position() - 1;
                             int length = end - start;
-                                    if (length > 3) {
-                            int pos = rel.position();
-                            rel.position(start);
-                            byte[] bytes = new byte[length];
-                            rel.get(bytes);
-                            rel.position(pos);
+                            if (length > 3) {
+                                int pos = rel.position();
+                                rel.position(start);
+                                byte[] bytes = new byte[length];
+                                rel.get(bytes);
+                                rel.position(pos);
 //                                System.out.println("String found " + toHex(start) + ":" + toHex(map.position()));
 //                                        textOut.write("#".getBytes(SHIFT_JIS));
 //                                        textOut.write(toHex(start).getBytes(SHIFT_JIS));
@@ -72,8 +71,8 @@ public class RelSearcher {
 //                                            textOut.write(0x3F);
 //                                        }
 //                                        textOut.write("\r\n".getBytes(SHIFT_JIS));
-                            collector.add(new HomelandString(file, start, length, bytes));
-                                    }
+                                collector.add(new HomelandString(file, start, length, bytes));
+                            }
                         } else if (inRange(b, INVALID_FIRST_BYTE_RANGES)) {
                             //not a string
                             state = State.searching;

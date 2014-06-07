@@ -1,4 +1,5 @@
 
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.MappedByteBuffer;
@@ -6,13 +7,16 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.SortedMap;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static java.nio.file.StandardOpenOption.*;
 
@@ -126,11 +130,16 @@ public class StringExtractor {
             end(0x14e9b0, 0x151390), //len(0x1379c0, 111924),
         }),
         new Rel("boot.dol", new RelRange[]{
-            //len(0xf3880, 0x85d80),
+//            len(0xf3880, 0x85d80),
             end(0x0f4688, 0x0f531b),
             end(0x0f5398, 0x0f5404),
             end(0x0f5480, 0x0f54ea),
-            end(0x0f570a, 0x0f8fc2),}),};
+            end(0x0f570a, 0x0f8fc2),
+            end(0x1798e8, 0x1798fe),
+            end(0x179960, 0x179a5c),
+            end(0x179a6a, 0x179ea0),
+//            len(0x179600, 0x19e0),
+        }),};
     private static final char[] HEX = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
     private static RelRange len(int offset, int length) {
@@ -141,16 +150,25 @@ public class StringExtractor {
         return new RelRange(offset, toOffset - offset);
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
         String baseDir = args[0];//"C:\\Users\\Playtech\\New Folder\\gc\\hl";
         String outFile = args[1];//"C:\\Users\\Playtech\\New Folder\\gc\\hl\\texts.dump";
         Path base = Paths.get(baseDir);
         List<HomelandString> strings = new ArrayList<>(25_000);
-        Map<String, List<HomelandString>> canonicalized = new LinkedHashMap<>(50_000);
+        Map<Key, List<HomelandString>> canonicalized = new LinkedHashMap<>(50_000);
         for (Rel rel : RELS) {
             try (FileChannel fc = FileChannel.open(base.resolve(rel.rel), READ)) {
                 MappedByteBuffer map = fc.map(MapMode.READ_ONLY, 0, fc.size());
-                RelSearcher.relStrings(rel.rel, map, rel.ranges, strings);
+                if (rel.rel.equalsIgnoreCase("boot.dol")) {
+                    List<HomelandString> bds = new ArrayList<>(25_000);
+                    RelSearcher.relStrings(rel.rel, map, rel.ranges, bds);
+                    strings.addAll(bds);
+                    for (HomelandString hs : bds) {
+                        System.out.println("" + toHex(hs.offset) + " " + toHex(hs.length) + " " + hs.string);
+                    }
+                } else {
+                    RelSearcher.relStrings(rel.rel, map, rel.ranges, strings);
+                }
             }
         }
         try (FileChannel allbin = FileChannel.open(base.resolve("all.bin"), READ);
@@ -162,40 +180,83 @@ public class StringExtractor {
         }
         System.gc();
         for (HomelandString str : strings) {
-            List<HomelandString> list = canonicalized.get(str.string);
+            Key key = new Key(str.strBytes);
+            List<HomelandString> list = canonicalized.get(key);
             if (list == null) {
                 list = new ArrayList<>(1);
-                canonicalized.put(str.string, list);
+                canonicalized.put(key, list);
             }
             list.add(str);
         }
+
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
         try (FileOutputStream fos = new FileOutputStream(outFile)) {
             int i = 0;
-            for (Entry<String, List<HomelandString>> e : canonicalized.entrySet()) {
-                String string = e.getKey();
+            final Set<String> ids = new TreeSet<>();
+            for (Entry<Key, List<HomelandString>> e : canonicalized.entrySet()) {
+//                String string = e.getKey();
                 List<HomelandString> list = e.getValue();
-                fos.write(("#str"+i).getBytes(HomelandString.SHIFT_JIS));
+                HomelandString hs = list.get(0);
+                md.reset();
+                byte[] digest = md.digest(hs.strBytes);
+                String sha = toHex(digest);
+                String id = sha.substring(0, 8);
+                if (!ids.add(id)) {
+                    throw new RuntimeException("duplicate id " + id);
+                }
+                id = "hl-string-" + id;
+                fos.write(id.getBytes(HomelandString.SHIFT_JIS));
                 fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
-                for (HomelandString hs : list) {
-                    fos.write(hs.file.getBytes(HomelandString.SHIFT_JIS));
+                for (HomelandString h : list) {
+                    fos.write(h.file.getBytes(HomelandString.SHIFT_JIS));
                     fos.write("\t".getBytes(HomelandString.SHIFT_JIS));
-                    fos.write(toHex(hs.offset).getBytes(HomelandString.SHIFT_JIS));
+                    fos.write(toHex(h.offset).getBytes(HomelandString.SHIFT_JIS));
                     fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
                 }
                 fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
-                HomelandString hs = list.get(0);
                 fos.write(toHex(hs.length).getBytes(HomelandString.SHIFT_JIS));
                 fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
                 fos.write(hs.strBytes);
-                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
-                byte[] strNumberBytes = String.valueOf(i).getBytes(HomelandString.SHIFT_JIS);
-                fos.write(strNumberBytes, 0, Math.min(strNumberBytes.length, hs.length));
-                for (int j = strNumberBytes.length; j < hs.strBytes.length; j++) {
-                    fos.write(0x3F);
-                }
+//                fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
+//                byte[] strNumberBytes = sha.getBytes(HomelandString.SHIFT_JIS);
+//                fos.write(strNumberBytes, 0, Math.min(strNumberBytes.length, hs.length));
+//                for (int j = strNumberBytes.length; j < hs.strBytes.length; j++) {
+//                    fos.write(0x3F);
+//                }
                 fos.write("\r\n".getBytes(HomelandString.SHIFT_JIS));
                 i++;
             }
+        }
+    }
+
+    private static class Key {
+
+        private final byte[] key;
+
+        public Key(byte[] key) {
+            this.key = key;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            final Key other = (Key) obj;
+            if (!Arrays.equals(this.key, other.key)) {
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 5;
+            hash = 71 * hash + Arrays.hashCode(this.key);
+            return hash;
         }
     }
 
@@ -209,5 +270,16 @@ public class StringExtractor {
                     HEX[(i >> 8) & 0xF],
                     HEX[(i >> 4) & 0xF],
                     HEX[(i >> 0) & 0xF],});
+    }
+
+    public static String toHex(byte[] ba) {
+        char[] hex = new char[ba.length * 2];
+        for (int i = 0; i < ba.length; i++) {
+            int b = ba[i];
+            b &= 0xFF;
+            hex[2 * i] = HEX[(b >> 4) & 0xF];
+            hex[2 * i + 1] = HEX[(b >> 0) & 0xF];
+        }
+        return new String(hex);
     }
 }
