@@ -32,7 +32,7 @@ public class Patcher {
             String t = TEXTS[i];
             System.out.println(t);
             byte[] data = Files.readAllBytes(new File(t).toPath());
-            Map<String, TextsParser.Entry> entries = TextsParser.parseTexts(data);
+            Map<Key, TextsParser.Entry> entries = TextsParser.parseTexts(data);
             for (TextsParser.Entry e : entries.values()) {
                 System.out.println("\t" + e);
             }
@@ -46,15 +46,18 @@ public class Patcher {
 //        {"C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\start.translated",
 //            "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\ring-menu.translated",
 //                 "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\status-effects.translated",
-//                 "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\normal-items.translated"};
+//                 "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\normal-items.translated",
+//                 "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\mascot-block.translated",
+//                 "C:\\Users\\Playtech\\Documents\\GitHub\\HomelandStrings\\weapons.translated",
+//        };
         Path hlDir = Paths.get(targetdir);
         byte[] data = Files.readAllBytes(new File(texts).toPath());
-        Map<String, TextsParser.Entry> entries = TextsParser.parseTexts(data);
-        Map<String, byte[]> repEntries = new HashMap<>(25_000);
+        Map<Key, TextsParser.Entry> entries = TextsParser.parseTexts(data);
+        Map<Key, byte[]> repEntries = new HashMap<>(25_000);
         for (String s : replacements) {
             byte[] replacementsData = Files.readAllBytes(new File(s).toPath());
-            Map<String, byte[]> rep = TextsParser.parseReplacements(replacementsData);
-            for (String id : rep.keySet()) {
+            Map<Key, byte[]> rep = TextsParser.parseReplacements(replacementsData);
+            for (Key id : rep.keySet()) {
                 if (repEntries.containsKey(id)) {
                     throw new RuntimeException("duplicate string id '" + id + "' in file " + s);
                 }
@@ -71,8 +74,8 @@ public class Patcher {
         List<FileChannel> toClose = new ArrayList<>(5);
         Map<String, MappedByteBuffer> maps = new HashMap<>(10);
         try {
-            for (Entry<String, TextsParser.Entry> en : entries.entrySet()) {
-                String id = en.getKey();
+            for (Entry<Key, TextsParser.Entry> en : entries.entrySet()) {
+                Key id = en.getKey();
                 TextsParser.Entry e = en.getValue();
                 byte[] rep = repEntries.get(id);
 //                if (rep == null) {
@@ -94,7 +97,7 @@ public class Patcher {
 
                         if (rep != null) {
                             if (rep.length > e.length) {
-                                throw new RuntimeException("" + id + " " + " lengths disagree " + e.length + " > " + rep.length);
+                                throw new RuntimeException("" + id + " " + " lengths disagree " + e.length + " < " + rep.length);
                             }
                             mm.put(rep);
                             while (mm.position() < off + e.length) {

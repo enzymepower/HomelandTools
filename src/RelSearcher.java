@@ -53,7 +53,7 @@ public class RelSearcher {
                             state = State.searching;
                             int end = rel.position() - 1;
                             int length = end - start;
-                            if (length > 3) {
+                            if (length > 1) {
                                 int pos = rel.position();
                                 rel.position(start);
                                 byte[] bytes = new byte[length];

@@ -17,12 +17,12 @@ public class TextsParser {
 
     public static class Entry {
 
-        public final String id;
+        public final Key id;
         public final int length;
         public final byte[] originalText;
         public final Map<String, List<Integer>> offsets;
 
-        public Entry(String id, int length, byte[] originalText, Map<String, List<Integer>> offsets) {
+        public Entry(Key id, int length, byte[] originalText, Map<String, List<Integer>> offsets) {
             this.id = id;
             this.length = length;
             this.originalText = originalText;
@@ -38,9 +38,9 @@ public class TextsParser {
         }
     }
 
-    public static Map<String, Entry> parseTexts(byte[] data) {
+    public static Map<Key, Entry> parseTexts(byte[] data) {
         int offset = 0;
-        Map<String, Entry> entries = new LinkedHashMap<>(50_000);
+        Map<Key, Entry> entries = new LinkedHashMap<>(50_000);
         while (offset < data.length) {
             final boolean ignore;
             if (HASH == b(data, offset)) {
@@ -49,11 +49,11 @@ public class TextsParser {
             } else {
                 ignore = false;
             }
-            final String entryId;
+            final Key entryId;
             {
                 final int idSize = next(data, offset, LF);
                 final byte[] idBytes = Arrays.copyOfRange(data, offset, offset + idSize);
-                entryId = new String(idBytes, SHIFT_JIS).intern();
+                entryId = new Key(idBytes);
                 offset += idSize;
                 offset++;//lf
             }
@@ -108,9 +108,9 @@ public class TextsParser {
         return entries;
     }
 
-    public static Map<String, byte[]> parseReplacements(byte[] data) {
+    public static Map<Key, byte[]> parseReplacements(byte[] data) {
         int offset = 0;
-        Map<String, byte[]> entries = new HashMap<>(1000);
+        Map<Key, byte[]> entries = new HashMap<>(1000);
         while (offset < data.length) {
             final boolean ignore;
             if (HASH == b(data, offset)) {
@@ -119,11 +119,11 @@ public class TextsParser {
             } else {
                 ignore = false;
             }
-            final String entryId;
+            final Key entryId;
             {
                 final int idSize = next(data, offset, LF);
                 final byte[] idBytes = Arrays.copyOfRange(data, offset, offset + idSize);
-                entryId = new String(idBytes, SHIFT_JIS).intern();
+                entryId = new Key(idBytes);
                 offset += idSize;
                 offset++;//lf
             }
